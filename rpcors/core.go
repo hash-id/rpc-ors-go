@@ -58,9 +58,9 @@ func StreamCleanupScheduler(cl *redis.Client, stream string, flushSize *int, svc
 		}
 		// this section is only on server --> consumers removal
 		if svc != nil {
-			fiveMinutesAgo := time.Now().Add(-5 * time.Minute).UnixMilli()
-			oldConsumers, _ := cl.ZRangeByScore(ctx, svc.hashedName, &redis.ZRangeBy{
-				Max: fmt.Sprint(fiveMinutesAgo),
+			twoMinutesAgo := time.Now().Add(-2 * time.Minute).UnixMilli()
+			oldConsumers, _ := cl.ZRangeByScore(ctx, svc.sortedSetName, &redis.ZRangeBy{
+				Max: fmt.Sprint(twoMinutesAgo),
 			}).Result()
 			log.Println(oldConsumers)
 			for _, name := range oldConsumers {
@@ -71,7 +71,7 @@ func StreamCleanupScheduler(cl *redis.Client, stream string, flushSize *int, svc
 			}
 			if len(oldConsumers) > 0 {
 				// remove entries in sorted sets
-				if err := cl.ZRemRangeByScore(ctx, svc.hashedName, "0", fmt.Sprint(fiveMinutesAgo)).Err(); err != nil {
+				if err := cl.ZRemRangeByScore(ctx, svc.sortedSetName, "0", fmt.Sprint(twoMinutesAgo)).Err(); err != nil {
 					log.Println("ZRemRangeByScore", err.Error())
 				}
 			}
