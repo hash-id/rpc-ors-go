@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	runtime.GOMAXPROCS(1) // set 1 for testing
+	runtime.GOMAXPROCS(2) // set 1 for testing
 	server := rpcors.NewService(rpcors.ServiceConfig{
 		Name: "nodejs",
 	}, redis.Options{
@@ -20,8 +20,8 @@ func main() {
 	})
 	server.Register("method-sample", func(data *jsonrpc.RPC) ([]byte, *jsonrpc.ErrorObj) {
 		fmt.Println("method-sample-called", data.ID)
-		// return jsonrpc.Success(1234, "demosaja")
-		return jsonrpc.Error(data.ID, jsonrpc.ErrorWith(20123, "failed"))
+		return jsonrpc.Success(1234, "demosaja")
+		// return jsonrpc.Error(data.ID, jsonrpc.ErrorWith(20123, "failed"))
 	})
 
 	select {}

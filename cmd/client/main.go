@@ -24,7 +24,7 @@ func main() {
 	ctx := context.Background()
 	time.Sleep(3 * time.Second)
 
-	totalReq := 10
+	totalReq := 5000
 	wg := sync.WaitGroup{}
 	wg.Add(totalReq)
 
