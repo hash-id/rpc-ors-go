@@ -1,4 +1,4 @@
-package rpcorsgo
+package rpcors
 
 import (
 	"sync"
@@ -47,10 +47,6 @@ func (s *SafeChannelMap) Get(key string) (chan RpcObject, bool) {
 /* -------------------------------------------------------------------------- */
 /*                                FOR SERVER.GO                               */
 /* -------------------------------------------------------------------------- */
-type ReplyObj struct {
-	id string
-}
-
 type RequestObj struct {
 	id      string
 	replyTo string
