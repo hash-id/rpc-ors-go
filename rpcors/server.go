@@ -19,8 +19,7 @@ type HandlerFunc func(data *jsonrpc.RPC) ([]byte, *jsonrpc.ErrorObj)
 type RpcServer struct {
 	client        *redis.Client
 	name          string
-	hashedName    string
-	lastReadId    string
+	sortedSetName string
 	registerChMap SafeReqObjMap
 	bufferChSize  int
 	inboxStream   string
@@ -43,9 +42,8 @@ func NewService(cfg ServiceConfig, redisCfg redis.Options) *RpcServer {
 	}
 	rpcInstance := RpcServer{
 		name:          cfg.Name,
-		hashedName:    NameToMd5(cfg.Name),
+		sortedSetName: NameToMd5(cfg.Name),
 		client:        CreateRedisClient(heartbeat, &redisCfg),
-		lastReadId:    fmt.Sprint(time.Now().UnixMilli()),
 		registerChMap: CreateSafeReqObjMap(),
 		bufferChSize:  10000,
 		inboxStream:   cfg.Name + "--server-inbox",
@@ -83,43 +81,37 @@ func (r *RpcServer) prepareConsumerGroup() {
 	}
 	// setup consumer name
 	r.consumerName = ConsumerNameGenerator(r.name)
-	log.Println(r.consumerName)
-	log.Println(r.hashedName)
 }
 
 func (r *RpcServer) inboxListener() {
 	log.Printf("<rpc-listener> starting %s\n", r.inboxStream)
+	log.Println(r.consumerName, r.sortedSetName)
 	ctx := context.Background()
-	streamSet := make([]string, 2)
-	streamSet[0] = r.inboxStream
 	for {
 		// update current consumer name to sorted-set, with current unixtime as score
-		err := r.client.ZAdd(ctx, r.hashedName, &redis.Z{Score: float64(time.Now().UnixMilli()), Member: r.consumerName}).Err()
+		err := r.client.ZAdd(ctx, r.sortedSetName, &redis.Z{Score: float64(time.Now().UnixMilli()), Member: r.consumerName}).Err()
 		if err != nil {
 			fmt.Println("ZAdd failed", r.consumerName)
 		}
-		// move the read cursor, set current timestamp if empty (usually after boot)
-		if r.lastReadId == "" {
-			r.lastReadId = fmt.Sprint(time.Now().UnixMilli())
-		}
-		streamSet[1] = r.lastReadId
-		// FIXME: XREADGROUP, sementara xread dulu sampai berfungsi
-		xstreamList, _ := r.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+		// XREADGROUP
+		xstreamList, err := r.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Count:    int64(StreamFetchSize),
-			Streams:  streamSet,
+			Streams:  []string{r.inboxStream, ">"},
 			Group:    consumerGroupName,
 			Consumer: r.consumerName,
 		}).Result()
+		if err != nil {
+			log.Println(err.Error())
+		}
+
 		// iterate items
 		for _, aStream := range xstreamList {
 			for _, message := range aStream.Messages {
-				log.Println(message)
-				msg := message
-				r.lastReadId = msg.ID
+				streamMsg := message
 				// use goroutine for faster loop!
 				go func() {
-					msgId := msg.Values["id"]
-					replyTo := msg.Values["replyTo"]
+					msgId := streamMsg.Values["id"]
+					replyTo := streamMsg.Values["replyTo"]
 					// get from redis
 					payloadKey := "request--" + fmt.Sprint(msgId)
 					payloadStr, err := r.client.Get(ctx, payloadKey).Result()
@@ -137,7 +129,7 @@ func (r *RpcServer) inboxListener() {
 						}
 					}
 					// confirm consumption with XACK
-					r.client.XAck(ctx, r.inboxStream, consumerGroupName, fmt.Sprint(msgId))
+					r.client.XAck(ctx, r.inboxStream, consumerGroupName, fmt.Sprint(streamMsg.ID))
 				}()
 
 			}

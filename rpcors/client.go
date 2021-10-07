@@ -48,7 +48,7 @@ func NewClient(cfg ClientConfig, redisCfg redis.Options) *RpcClient {
 	log.Println("<rpc-client> concurrency", concurrencyLimit)
 	rpcInstance := RpcClient{
 		client:       CreateRedisClient(heartbeat, &redisCfg),
-		lastReadId:   fmt.Sprint(time.Now().UnixMilli()),
+		lastReadId:   "",
 		replyChMap:   CreateSafeChannelMap(),
 		name:         cfg.Name,
 		dest:         cfg.Destination,
